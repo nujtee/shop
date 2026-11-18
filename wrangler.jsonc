@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "phasakura-shop",
+  "name": "shop",
   "main": "src/index.tsx",
   "compatibility_date": "2025-09-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -9,8 +9,7 @@
     {
       "binding": "DB",
       "database_name": "phasakura-shop",
-      // แทนที่ด้วย id ที่ได้จาก `npx wrangler d1 create phasakura-shop`
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "7c891a76-dba4-4072-a7e2-870be912aa73",
       "migrations_dir": "migrations"
     }
   ],

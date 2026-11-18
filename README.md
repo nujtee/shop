@@ -25,31 +25,30 @@
 - แจ้งเตือนเข้า LINE เมื่อมีออเดอร์ใหม่และเมื่อลูกค้าแนบสลิป
 - ตัดสต็อกตอนสั่งซื้อ ถ้าไม่แนบสลิปภายในเวลาที่ตั้ง (ค่าเริ่มต้น 24 ชม.) ระบบยกเลิกและคืนสต็อกให้ (ตรวจทุก 30 นาที)
 
-## ติดตั้งขึ้น Cloudflare ครั้งแรก
+## ติดตั้งขึ้น Cloudflare
 
-ต้องมี Node.js 20 ขึ้นไป แล้วรันในโฟลเดอร์นี้
+สร้างไว้แล้ว (18 พ.ย. 2026):
+
+- Worker ชื่อ `shop` (ตรงกับ `name` ใน `wrangler.jsonc`)
+- ฐานข้อมูล D1 `phasakura-shop` พร้อมตารางทั้งหมด (migration 0001)
+- ที่เก็บรูป R2 `phasakura-shop-media`
+
+ที่ต้องทำเองใน Cloudflare dashboard → Workers & Pages → `shop` → Settings → Variables and Secrets (เลือกแบบ Secret):
+
+| ชื่อ | ค่า |
+| --- | --- |
+| `ADMIN_PASSWORD` | รหัสเข้าหลังบ้าน |
+| `SESSION_SECRET` | ข้อความสุ่มยาว 32 ตัวขึ้นไป |
+| `LINE_CHANNEL_ACCESS_TOKEN` | จาก LINE Developers (ดูด้านล่าง) |
+| `LINE_NOTIFY_TO` | User ID ของคุณใน LINE (ขึ้นต้นด้วย U) |
+
+ขึ้นเว็บ: ถ้า Worker `shop` ต่อกับ repo นี้ผ่าน Workers Builds แล้ว แค่ merge เข้า `main` ก็ deploy ให้เอง ไม่อย่างนั้นรัน
 
 ```bash
 npm install
 npx wrangler login
-
-# 1) สร้างฐานข้อมูล แล้วนำ database_id ที่ได้ไปใส่ใน wrangler.jsonc
-npx wrangler d1 create phasakura-shop
-
-# 2) สร้างที่เก็บรูป
-npx wrangler r2 bucket create phasakura-shop-media
-
-# 3) สร้างตารางในฐานข้อมูลจริง
-npm run db:migrate
-
-# 4) ตั้งรหัสลับ (ระบบจะถามค่าทีละตัว)
-npx wrangler secret put ADMIN_PASSWORD           # รหัสเข้าหลังบ้าน
-npx wrangler secret put SESSION_SECRET           # ข้อความสุ่มยาว 32 ตัวขึ้นไป
-npx wrangler secret put LINE_CHANNEL_ACCESS_TOKEN
-npx wrangler secret put LINE_NOTIFY_TO           # User ID ของคุณใน LINE (ขึ้นต้นด้วย U)
-
-# 5) ขึ้นเว็บ (ผูกโดเมน shop.phasakura.com ให้อัตโนมัติ)
-npm run deploy
+npm run db:migrate   # ใช้เมื่อมี migration ใหม่เท่านั้น
+npm run deploy       # ผูกโดเมน shop.phasakura.com ให้อัตโนมัติ
 ```
 
 จากนั้นเข้า `https://shop.phasakura.com/admin` แล้วไปที่ **ตั้งค่าร้าน** เพื่อใส่เลขพร้อมเพย์และตารางค่าส่ง
