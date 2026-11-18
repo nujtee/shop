@@ -1,0 +1,5 @@
+# คัดลอกเป็น .dev.vars สำหรับรันในเครื่อง (ห้าม commit)
+ADMIN_PASSWORD=change-me
+SESSION_SECRET=a-long-random-string
+LINE_CHANNEL_ACCESS_TOKEN=
+LINE_NOTIFY_TO=
