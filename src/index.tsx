@@ -5,6 +5,7 @@ import { secureHeaders } from 'hono/secure-headers';
 import { Env, baht } from './lib/util';
 import { cancelOrder, getSettings } from './lib/store';
 import { notifyLine } from './lib/line';
+import { themeVars, isDefaultTheme } from './lib/theme';
 import shop from './routes/shop';
 import api from './routes/api';
 import admin from './routes/admin';
@@ -19,6 +20,24 @@ app.use('/admin/*', async (c, next) => {
   await next();
   c.header('cache-control', 'no-store');
   c.header('x-robots-tag', 'noindex');
+});
+
+// ใส่สีธีมที่ตั้งไว้ในหลังบ้านลงในทุกหน้า HTML
+app.use('*', async (c, next) => {
+  await next();
+  if (!(c.res.headers.get('content-type') || '').includes('text/html')) return;
+  const rows = await c.env.DB.prepare("SELECT key, value FROM settings WHERE key IN ('theme_accent','theme_leaf')")
+    .all<{ key: string; value: string }>()
+    .then((r) => Object.fromEntries(r.results.map((x) => [x.key, x.value])))
+    .catch(() => ({}) as Record<string, string>);
+  if (isDefaultTheme(rows.theme_accent, rows.theme_leaf)) return;
+  const t = themeVars(rows.theme_accent, rows.theme_leaf);
+  const html = (await c.res.text())
+    .replace('<meta name="theme-color" content="#2f7d4f"/>', `<meta name="theme-color" content="${t.light.leaf}"/>`)
+    .replace('</head>', `<style id="theme">${t.css}</style></head>`);
+  const headers = new Headers(c.res.headers);
+  headers.delete('content-length');
+  c.res = new Response(html, { status: c.res.status, headers });
 });
 
 app.route('/api', api);
