@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "phasakura-shop",
+  "main": "src/index.tsx",
+  "compatibility_date": "2025-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "phasakura-shop",
+      // แทนที่ด้วย id ที่ได้จาก `npx wrangler d1 create phasakura-shop`
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "phasakura-shop-media" }],
+  // ยกเลิกออเดอร์พร้อมเพย์ที่ไม่แนบสลิปเกินเวลาที่ตั้งไว้ และคืนสต็อก
+  "triggers": { "crons": ["*/30 * * * *"] },
+  "vars": { "SHOP_URL": "https://shop.phasakura.com" },
+  "routes": [{ "pattern": "shop.phasakura.com", "custom_domain": true }],
+  "observability": { "enabled": true }
+}
