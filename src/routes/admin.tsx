@@ -18,6 +18,7 @@ import {
 import { getSettings, cancelOrder, parseTiers, ShippingTier } from '../lib/store';
 import { login, logout, requireAdmin } from '../lib/auth';
 import { Shell, imgUrl } from '../views/layout';
+import { PALETTE, PRESETS, isHex, themeVars, DEFAULT_ACCENT, DEFAULT_LEAF } from '../lib/theme';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -29,6 +30,7 @@ const NAV: [string, string][] = [
   ['/admin/categories', 'หมวดหมู่'],
   ['/admin/coupons', 'คูปอง'],
   ['/admin/settings', 'ตั้งค่าร้าน'],
+  ['/admin/theme', 'ธีมสี'],
 ];
 
 const MSG: Record<string, string> = {
@@ -41,12 +43,13 @@ const MSG: Record<string, string> = {
   inuse: 'ลบไม่ได้ เพราะยังมีสินค้าในหมวดนี้',
   dup: 'ชื่อหรือโค้ดนี้มีอยู่แล้ว',
   invalid: 'ข้อมูลไม่ครบหรือไม่ถูกต้อง',
+  badcolor: 'เลือกสีไม่ถูกต้อง',
   badpp: 'เลขพร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก หรือเลข 13 หลัก',
 };
 
 function Admin(props: { title: string; path: string; msg?: string; children: Child; wide?: boolean }) {
   return (
-    <Shell title={`${props.title} · หลังบ้าน`} bodyClass="admin-body" scripts={['/admin.js?v=1']}>
+    <Shell title={`${props.title} · หลังบ้าน`} bodyClass="admin-body" scripts={['/admin.js?v=2']}>
       <div class="admin">
         <aside class="side">
           <a class="lg" href="/admin">
@@ -1451,6 +1454,96 @@ app.post('/settings', async (c) => {
     ),
   );
   return c.redirect('/admin/settings?m=saved');
+});
+
+// ---------- ธีมสี ----------
+function Swatches(props: { name: string; current: string; label: string }) {
+  const list = PALETTE.includes(props.current) ? PALETTE : [...PALETTE, props.current];
+  return (
+    <fieldset class="swatches">
+      <legend>{props.label}</legend>
+      <div class="sw-grid">
+        {list.map((hex) => (
+          <label class="sw" style={`--c:${hex}`} title={hex}>
+            <input type="radio" name={props.name} value={hex} checked={hex === props.current} aria-label={hex} />
+          </label>
+        ))}
+      </div>
+      <p class="muted sw-now">
+        เลือกอยู่: <span class="dot" style={`--c:${props.current}`} data-now={props.name}></span>{' '}
+        <span class="mono" data-now-hex={props.name}>
+          {props.current}
+        </span>
+      </p>
+    </fieldset>
+  );
+}
+
+app.get('/theme', async (c) => {
+  const s = await getSettings(c.env.DB);
+  const accent = isHex(s.theme_accent) ? s.theme_accent.toLowerCase() : DEFAULT_ACCENT;
+  const leaf = isHex(s.theme_leaf) ? s.theme_leaf.toLowerCase() : DEFAULT_LEAF;
+  const t = themeVars(accent, leaf);
+  return c.html(
+    <Admin title="ธีมสี" path="/admin/theme" msg={c.req.query('m')}>
+      <h1>ธีมสีของเว็บ</h1>
+      <p class="muted">เปลี่ยนแล้วมีผลกับหน้าร้านและหลังบ้านทันที ถ้าสีอ่อนเกินจนอ่านไม่ออก ระบบจะปรับให้เข้มขึ้นเล็กน้อยเองอัตโนมัติ</p>
+
+      <div class="th-prev" data-theme-preview style={`--accent:${t.light.accent};--leaf:${t.light.leaf};--on-accent:${t.lightOn.accent};--on-leaf:${t.lightOn.leaf}`}>
+        <div class="th-bar">
+          <b class="th-brand">{s.shop_name || 'Phasakura'}</b>
+          <span class="th-link">ติดตามคำสั่งซื้อ</span>
+        </div>
+        <div class="th-card">
+          <div class="th-img"></div>
+          <div>
+            <div>มอนสเตอร่า ใบด่าง กระถาง 6 นิ้ว</div>
+            <div>
+              <span class="th-price">฿390</span> <s class="muted">฿490</s> <span class="th-off">-20%</span>{' '}
+              <span class="th-free">ส่งฟรี</span>
+            </div>
+            <span class="th-btn">สั่งซื้อเลย</span>
+          </div>
+        </div>
+      </div>
+
+      <h2>ธีมสำเร็จรูป</h2>
+      <form method="post" class="presets">
+        {PRESETS.map((p) => (
+          <button
+            name="preset"
+            value={p.key}
+            class={'preset' + (p.accent === accent && p.leaf === leaf ? ' on' : '')}
+            aria-pressed={p.accent === accent && p.leaf === leaf ? 'true' : 'false'}
+          >
+            <span class="pv">
+              <i style={`background:${p.leaf}`}></i>
+              <i style={`background:${p.accent}`}></i>
+            </span>
+            {p.name}
+          </button>
+        ))}
+      </form>
+
+      <h2>เลือกสีเอง (256 สี)</h2>
+      <form method="post" class="theme-form">
+        <Swatches name="accent" current={accent} label="สีหลัก: ราคา ปุ่มสั่งซื้อ ป้ายลดราคา" />
+        <Swatches name="leaf" current={leaf} label="สีรอง: ชื่อร้าน ลิงก์ เมนู ป้ายส่งฟรี" />
+        <button class="btn pri">บันทึกสี</button>
+      </form>
+    </Admin>,
+  );
+});
+
+app.post('/theme', async (c) => {
+  const f = await c.req.parseBody();
+  const preset = PRESETS.find((p) => p.key === f.preset);
+  const accent = preset ? preset.accent : String(f.accent ?? '').toLowerCase();
+  const leaf = preset ? preset.leaf : String(f.leaf ?? '').toLowerCase();
+  if (!isHex(accent) || !isHex(leaf)) return c.redirect('/admin/theme?m=badcolor');
+  const up = 'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value';
+  await c.env.DB.batch([c.env.DB.prepare(up).bind('theme_accent', accent), c.env.DB.prepare(up).bind('theme_leaf', leaf)]);
+  return c.redirect('/admin/theme?m=saved');
 });
 
 export default app;

@@ -21,7 +21,7 @@ export function Shell(props: { title: string; description?: string; image?: stri
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
         <link rel="stylesheet" href={FONTS} />
-        <link rel="stylesheet" href="/styles.css?v=1" />
+        <link rel="stylesheet" href="/styles.css?v=2" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
       </head>
       <body class={props.bodyClass}>

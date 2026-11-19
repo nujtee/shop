@@ -62,3 +62,34 @@
     });
   }
 })();
+
+// หน้า ธีมสี: แสดงตัวอย่างทันทีเมื่อเลือกสี
+(function () {
+  var form = document.querySelector('.theme-form');
+  var prev = document.querySelector('[data-theme-preview]');
+  if (!form || !prev) return;
+  function rgb(h) { return [1, 3, 5].map(function (i) { return parseInt(h.slice(i, i + 2), 16); }); }
+  function hex(c) { return '#' + c.map(function (x) { return Math.round(Math.max(0, Math.min(255, x))).toString(16).padStart(2, '0'); }).join(''); }
+  function lum(h) {
+    var v = rgb(h).map(function (x) { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); });
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  }
+  function contrast(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+  function readable(c) {
+    var out = c, a = rgb(c);
+    for (var t = 0.1; contrast(out, '#ffffff') < 3 && t <= 1; t += 0.1) out = hex(a.map(function (x) { return x * (1 - t); }));
+    return out;
+  }
+  function on(c) { return contrast(c, '#ffffff') >= 3 ? '#ffffff' : '#1d221c'; }
+  form.addEventListener('change', function (e) {
+    var el = e.target;
+    if (el.type !== 'radio') return;
+    var c = readable(el.value);
+    prev.style.setProperty('--' + (el.name === 'accent' ? 'accent' : 'leaf'), c);
+    prev.style.setProperty('--on-' + (el.name === 'accent' ? 'accent' : 'leaf'), on(c));
+    var dot = document.querySelector('[data-now="' + el.name + '"]');
+    var txt = document.querySelector('[data-now-hex="' + el.name + '"]');
+    if (dot) dot.style.setProperty('--c', el.value);
+    if (txt) txt.textContent = el.value;
+  });
+})();
