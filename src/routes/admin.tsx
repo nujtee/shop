@@ -31,6 +31,7 @@ const NAV: [string, string][] = [
   ['/admin/coupons', 'คูปอง'],
   ['/admin/settings', 'ตั้งค่าร้าน'],
   ['/admin/theme', 'ธีมสี'],
+  ['/admin/seo', 'โลโก้และ SEO'],
 ];
 
 const MSG: Record<string, string> = {
@@ -44,12 +45,14 @@ const MSG: Record<string, string> = {
   dup: 'ชื่อหรือโค้ดนี้มีอยู่แล้ว',
   invalid: 'ข้อมูลไม่ครบหรือไม่ถูกต้อง',
   badcolor: 'เลือกสีไม่ถูกต้อง',
+  badimg: 'ใช้ได้เฉพาะไฟล์ PNG, JPG หรือ WebP ขนาดไม่เกิน 2 MB',
+  removed: 'ลบรูปแล้ว',
   badpp: 'เลขพร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก หรือเลข 13 หลัก',
 };
 
 function Admin(props: { title: string; path: string; msg?: string; children: Child; wide?: boolean }) {
   return (
-    <Shell title={`${props.title} · หลังบ้าน`} bodyClass="admin-body" scripts={['/admin.js?v=2']}>
+    <Shell title={`${props.title} · หลังบ้าน`} noindex bodyClass="admin-body" scripts={['/admin.js?v=3']}>
       <div class="admin">
         <aside class="side">
           <a class="lg" href="/admin">
@@ -94,7 +97,7 @@ const arr = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : v == n
 app.get('/login', (c) => {
   const err = c.req.query('e');
   return c.html(
-    <Shell title="เข้าสู่ระบบหลังบ้าน" scripts={[]}>
+    <Shell title="เข้าสู่ระบบหลังบ้าน" noindex scripts={[]}>
       <form class="login" method="post">
         <h1>หลังบ้าน Phasakura</h1>
         <label>
@@ -1544,6 +1547,158 @@ app.post('/theme', async (c) => {
   const up = 'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value';
   await c.env.DB.batch([c.env.DB.prepare(up).bind('theme_accent', accent), c.env.DB.prepare(up).bind('theme_leaf', leaf)]);
   return c.redirect('/admin/theme?m=saved');
+});
+
+// ---------- โลโก้และ SEO ----------
+const BRAND_TYPES: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
+const BRAND_KEYS: Record<string, string> = { logo: 'logo_key', share: 'share_image_key' };
+
+app.get('/seo', async (c) => {
+  const s = await getSettings(c.env.DB);
+  const base = c.env.SHOP_URL;
+  const title = s.seo_title || `${s.shop_name} · ${s.tagline}`;
+  const desc = s.seo_description || s.tagline;
+  const ImgBox = (p: { kind: string; label: string; hint: string; k?: string }) => (
+    <div class="brand-img">
+      <div class={'bi-prev ' + p.kind}>{p.k ? <img src={imgUrl(p.k)} alt={p.label} /> : <span class="muted">ยังไม่มีรูป</span>}</div>
+      <div>
+        <b>{p.label}</b>
+        <p class="muted">{p.hint}</p>
+        <form method="post" action={`/admin/seo/image/${p.kind}`} enctype="multipart/form-data" class="row">
+          <input type="file" name="file" accept="image/png,image/jpeg,image/webp" required aria-label={`เลือกไฟล์${p.label}`} />
+          <button class="btn pri">อัปโหลด</button>
+        </form>
+        {p.k && (
+          <form method="post" action={`/admin/seo/image/${p.kind}/delete`} data-confirm={`ลบ${p.label}?`}>
+            <button class="linkbtn neg">ลบรูปนี้</button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+  return c.html(
+    <Admin title="โลโก้และ SEO" path="/admin/seo" msg={c.req.query('m')}>
+      <h1>โลโก้และ SEO</h1>
+
+      <h2>โลโก้</h2>
+      <ImgBox
+        kind="logo"
+        label="โลโก้ร้าน"
+        hint="แสดงที่หัวเว็บ ไอคอนแท็บเบราว์เซอร์ และใน Google แนะนำรูปสี่เหลี่ยมจัตุรัส พื้นใส (PNG) อย่างน้อย 512×512 px"
+        k={s.logo_key}
+      />
+      <form method="post" action="/admin/seo/logo-name" class="row">
+        <label class="check">
+          <input type="checkbox" name="logo_hide_name" value="1" checked={s.logo_hide_name === '1'} /> ซ่อนชื่อร้านข้างโลโก้
+          (ใช้เมื่อโลโก้มีชื่อร้านอยู่แล้ว)
+        </label>
+        <button class="btn sec">บันทึก</button>
+      </form>
+
+      <h2>รูปตอนแชร์ลิงก์</h2>
+      <ImgBox
+        kind="share"
+        label="รูปตอนแชร์ลิงก์"
+        hint="แสดงเมื่อแชร์ลิงก์หน้าร้านใน LINE หรือ Facebook ขนาดแนะนำ 1200×630 px ถ้าไม่ใส่จะใช้โลโก้แทน (หน้าสินค้าใช้รูปสินค้าเสมอ)"
+        k={s.share_image_key}
+      />
+
+      <h2>SEO หน้าร้าน</h2>
+      <div class="serp" aria-label="ตัวอย่างใน Google">
+        <div class="serp-url">{base.replace('https://', '')}</div>
+        <div class="serp-title" data-serp-title>
+          {title}
+        </div>
+        <div class="serp-desc" data-serp-desc>
+          {desc}
+        </div>
+      </div>
+      <form class="fields" method="post" action="/admin/seo">
+        <label class="full">
+          ชื่อหน้าเว็บใน Google (ไม่เกิน 60 ตัวอักษร)
+          <input name="seo_title" value={s.seo_title} maxlength={70} placeholder={`${s.shop_name} · ${s.tagline}`} data-serp-in="title" />
+        </label>
+        <label class="full">
+          คำอธิบายใต้ชื่อใน Google (ไม่เกิน 160 ตัวอักษร)
+          <textarea name="seo_description" rows={3} maxlength={200} placeholder={s.tagline} data-serp-in="desc">
+            {s.seo_description}
+          </textarea>
+        </label>
+        <label class="full">
+          รหัสยืนยัน Google Search Console (วางทั้งแท็ก meta หรือเฉพาะรหัสก็ได้)
+          <input name="google_site_verification" value={s.google_site_verification} placeholder='<meta name="google-site-verification" content="..." />' />
+        </label>
+        <button class="btn pri full">บันทึก SEO</button>
+      </form>
+
+      <div class="box seo-auto">
+        <b>ระบบทำให้อัตโนมัติแล้ว</b>
+        <ul>
+          <li>หน้าสินค้าใช้ชื่อสินค้า คำอธิบาย ราคา และรูป เป็นข้อมูลสำหรับ Google และตอนแชร์ลิงก์</li>
+          <li>ข้อมูลสินค้าแบบ Google Shopping (ราคา สต็อก รูป หมวดหมู่) ฝังอยู่ในทุกหน้าสินค้า</li>
+          <li>
+            แผนผังเว็บ <a href="/sitemap.xml" target="_blank">{base}/sitemap.xml</a> อัปเดตเองเมื่อเพิ่มสินค้า
+          </li>
+          <li>หน้าตะกร้า คำสั่งซื้อ หลังบ้าน และผลค้นหา ถูกกันไม่ให้ Google เก็บ</li>
+        </ul>
+        <p class="muted">
+          ขั้นต่อไปที่แนะนำ: เพิ่มเว็บใน{' '}
+          <a href="https://search.google.com/search-console" target="_blank" rel="noopener">
+            Google Search Console
+          </a>{' '}
+          ยืนยันด้วยรหัสด้านบน แล้วส่ง sitemap ลิงก์ด้านบน
+        </p>
+      </div>
+    </Admin>,
+  );
+});
+
+const upsert = (db: D1Database, k: string, v: string) =>
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').bind(k, v);
+
+app.post('/seo', async (c) => {
+  const f = await c.req.parseBody();
+  const one = (k: string) => String(f[k] ?? '').replace(/\s+/g, ' ').trim();
+  let gv = one('google_site_verification');
+  const m = gv.match(/content=["']([^"']+)["']/);
+  if (m) gv = m[1];
+  gv = gv.replace(/[^A-Za-z0-9_\-]/g, '').slice(0, 100);
+  await c.env.DB.batch([
+    upsert(c.env.DB, 'seo_title', one('seo_title').slice(0, 70)),
+    upsert(c.env.DB, 'seo_description', one('seo_description').slice(0, 200)),
+    upsert(c.env.DB, 'google_site_verification', gv),
+  ]);
+  return c.redirect('/admin/seo?m=saved');
+});
+
+app.post('/seo/logo-name', async (c) => {
+  const f = await c.req.parseBody();
+  await upsert(c.env.DB, 'logo_hide_name', f.logo_hide_name === '1' ? '1' : '0').run();
+  return c.redirect('/admin/seo?m=saved');
+});
+
+app.post('/seo/image/:kind', async (c) => {
+  const setting = BRAND_KEYS[c.req.param('kind')];
+  if (!setting) return c.notFound();
+  const f = await c.req.parseBody();
+  const file = f.file;
+  if (!(file instanceof File) || !BRAND_TYPES[file.type] || file.size === 0 || file.size > 2 * 1024 * 1024)
+    return c.redirect('/admin/seo?m=badimg');
+  const key = `brand/${c.req.param('kind')}-${randomToken(6)}.${BRAND_TYPES[file.type]}`;
+  await c.env.BUCKET.put(key, file.stream(), { httpMetadata: { contentType: file.type } });
+  const old = await c.env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(setting).first<{ value: string }>();
+  await upsert(c.env.DB, setting, key).run();
+  if (old?.value?.startsWith('brand/')) await c.env.BUCKET.delete(old.value);
+  return c.redirect('/admin/seo?m=uploaded');
+});
+
+app.post('/seo/image/:kind/delete', async (c) => {
+  const setting = BRAND_KEYS[c.req.param('kind')];
+  if (!setting) return c.notFound();
+  const old = await c.env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(setting).first<{ value: string }>();
+  await upsert(c.env.DB, setting, '').run();
+  if (old?.value?.startsWith('brand/')) await c.env.BUCKET.delete(old.value);
+  return c.redirect('/admin/seo?m=removed');
 });
 
 export default app;

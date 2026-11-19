@@ -44,12 +44,14 @@ app.route('/api', api);
 app.route('/admin', admin);
 app.route('/', shop);
 
-app.get('/robots.txt', (c) => c.text(`User-agent: *\nDisallow: /admin\nDisallow: /order/\nDisallow: /api/\n`));
+app.get('/robots.txt', (c) =>
+  c.text(`User-agent: *\nDisallow: /admin\nDisallow: /order/\nDisallow: /api/\nDisallow: /cart\n\nSitemap: ${c.env.SHOP_URL}/sitemap.xml\n`),
+);
 
 app.notFound(async (c) => {
   const s = await getSettings(c.env.DB).catch(() => ({ shop_name: 'Phasakura', tagline: '' }) as any);
   return c.html(
-    <Shell title={`ไม่พบหน้านี้ · ${s.shop_name}`}>
+    <Shell s={s} noindex title={`ไม่พบหน้านี้ · ${s.shop_name}`}>
       <div class="phone-wrap">
         <ShopHeader s={s} back />
         <div class="order">
