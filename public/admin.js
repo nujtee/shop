@@ -93,3 +93,14 @@
     if (txt) txt.textContent = el.value;
   });
 })();
+
+// หน้า SEO: ตัวอย่างผลค้นหา Google เปลี่ยนตามที่พิมพ์
+(function () {
+  ['title', 'desc'].forEach(function (k) {
+    var input = document.querySelector('[data-serp-in="' + k + '"]');
+    var out = document.querySelector('[data-serp-' + k + ']');
+    if (!input || !out) return;
+    var fallback = out.textContent;
+    input.addEventListener('input', function () { out.textContent = input.value.trim() || input.placeholder || fallback; });
+  });
+})();

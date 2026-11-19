@@ -144,6 +144,7 @@ app.get('/', async (c) => {
     .bind(...binds, PER + 1, (page - 1) * PER)
     .all<Card>();
   const hasMore = products.length > PER;
+  const catName = cats.find((x) => x.slug === cat)?.name || '';
 
   const link = (patch: Record<string, string | null>) => {
     const u = new URL(url.toString());
@@ -162,7 +163,39 @@ app.get('/', async (c) => {
   };
 
   return c.html(
-    <Shell title={`${s.shop_name} · ${s.tagline}`} description={s.tagline}>
+    <Shell
+      s={s}
+      title={catName ? `${catName} · ${s.shop_name}` : s.seo_title || `${s.shop_name} · ${s.tagline}`}
+      description={s.seo_description || s.tagline}
+      url={c.env.SHOP_URL + (cat && catName ? `/?c=${encodeURIComponent(cat)}` : '/')}
+      noindex={!!q || page > 1 || !!sort || chips.size > 0 || (!!cat && !catName)}
+      jsonLd={
+        cat
+          ? []
+          : [
+              {
+                '@context': 'https://schema.org',
+                '@type': 'WebSite',
+                name: s.shop_name,
+                url: c.env.SHOP_URL + '/',
+                potentialAction: {
+                  '@type': 'SearchAction',
+                  target: c.env.SHOP_URL + '/?q={search_term_string}',
+                  'query-input': 'required name=search_term_string',
+                },
+              },
+              {
+                '@context': 'https://schema.org',
+                '@type': 'Store',
+                name: s.shop_name,
+                description: s.seo_description || s.tagline,
+                url: c.env.SHOP_URL + '/',
+                ...(s.logo_key ? { logo: c.env.SHOP_URL + imgUrl(s.logo_key), image: c.env.SHOP_URL + imgUrl(s.logo_key) } : {}),
+                ...(s.line_oa_url ? { sameAs: [s.line_oa_url] } : {}),
+              },
+            ]
+      }
+    >
       <div class="phone-wrap">
         <ShopHeader s={s} q={q} />
         <nav class="cats" aria-label="หมวดหมู่">
@@ -243,9 +276,55 @@ app.get('/p/:slug', async (c) => {
   const promoActive = s.promo_text && (!s.promo_ends_at || s.promo_ends_at > nowIso());
   const tiers = parseTiers(s);
   const ogImage = images[0] ? new URL(imgUrl(images[0].r2_key), c.env.SHOP_URL).toString() : undefined;
+  const pageUrl = `${c.env.SHOP_URL}/p/${encodeURIComponent(p.slug)}`;
+  const plain = p.description.replace(/\s+/g, ' ').trim();
+  const metaDesc = (
+    plain
+      ? plain
+      : `${p.name} ราคา ${baht(first.price)}${p.category_name ? ` หมวด${p.category_name}` : ''}${s.ship_from ? ` ส่งจาก${s.ship_from}` : ''} สั่งซื้อออนไลน์ที่ ${s.shop_name}`
+  ).slice(0, 160);
 
   return c.html(
-    <Shell title={`${p.name} · ${s.shop_name}`} description={p.description.slice(0, 150)} image={ogImage}>
+    <Shell
+      s={s}
+      title={`${p.name} · ${s.shop_name}`}
+      description={metaDesc}
+      image={ogImage}
+      url={pageUrl}
+      ogType="product"
+      jsonLd={[
+        {
+          '@context': 'https://schema.org',
+          '@type': 'Product',
+          name: p.name,
+          description: metaDesc,
+          url: pageUrl,
+          image: images.map((im: any) => c.env.SHOP_URL + imgUrl(im.r2_key)),
+          brand: { '@type': 'Brand', name: s.shop_name },
+          ...(p.category_name ? { category: p.category_name } : {}),
+          offers: {
+            '@type': 'AggregateOffer',
+            priceCurrency: 'THB',
+            lowPrice: (Math.min(...variants.map((v: any) => v.price)) / 100).toFixed(2),
+            highPrice: (Math.max(...variants.map((v: any) => v.price)) / 100).toFixed(2),
+            offerCount: variants.length,
+            availability: variants.some((v: any) => v.stock > 0) ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+            url: pageUrl,
+          },
+        },
+        {
+          '@context': 'https://schema.org',
+          '@type': 'BreadcrumbList',
+          itemListElement: [
+            { '@type': 'ListItem', position: 1, name: s.shop_name, item: c.env.SHOP_URL + '/' },
+            ...(p.category_slug
+              ? [{ '@type': 'ListItem', position: 2, name: p.category_name, item: `${c.env.SHOP_URL}/?c=${encodeURIComponent(p.category_slug)}` }]
+              : []),
+            { '@type': 'ListItem', position: p.category_slug ? 3 : 2, name: p.name, item: pageUrl },
+          ],
+        },
+      ]}
+    >
       <div class="phone-wrap pd">
         <ShopHeader s={s} back />
         <div class="gallery" aria-label="รูปสินค้า">
@@ -384,7 +463,7 @@ app.get('/p/:slug', async (c) => {
 app.get('/cart', async (c) => {
   const s = await getSettings(c.env.DB);
   return c.html(
-    <Shell title={`ตะกร้าสินค้า · ${s.shop_name}`}>
+    <Shell s={s} noindex title={`ตะกร้าสินค้า · ${s.shop_name}`}>
       <div class="phone-wrap">
         <ShopHeader s={s} back />
         <div id="cart-app" data-cod={s.cod_enabled === '1' ? '1' : '0'} data-promptpay={s.promptpay_id ? '1' : '0'}>
@@ -495,7 +574,7 @@ app.get('/order/:no', async (c) => {
   }
   const self = `/order/${o.order_no}?k=${o.access_key}`;
   return c.html(
-    <Shell title={`คำสั่งซื้อ ${o.order_no} · ${s.shop_name}`}>
+    <Shell s={s} noindex title={`คำสั่งซื้อ ${o.order_no} · ${s.shop_name}`}>
       <div class="phone-wrap">
         <ShopHeader s={s} back />
         <div class="order">
@@ -632,7 +711,7 @@ app.get('/track', async (c) => {
     error = 'ไม่พบคำสั่งซื้อ ตรวจเลขคำสั่งซื้อและเบอร์โทรอีกครั้ง';
   }
   return c.html(
-    <Shell title={`ติดตามคำสั่งซื้อ · ${s.shop_name}`}>
+    <Shell s={s} noindex title={`ติดตามคำสั่งซื้อ · ${s.shop_name}`}>
       <div class="phone-wrap">
         <ShopHeader s={s} back />
         <form class="order fields" method="get">
@@ -660,7 +739,7 @@ app.get('/policy', async (c) => {
   const s = await getSettings(c.env.DB);
   const tiers = parseTiers(s);
   return c.html(
-    <Shell title={`การจัดส่งและการรับประกัน · ${s.shop_name}`}>
+    <Shell s={s} url={c.env.SHOP_URL + '/policy'} title={`การจัดส่งและการรับประกัน · ${s.shop_name}`}>
       <div class="phone-wrap">
         <ShopHeader s={s} back />
         <div class="order">
@@ -700,16 +779,51 @@ app.get('/policy', async (c) => {
   );
 });
 
-// รูปสินค้าจาก R2 (สลิปไม่เปิดสาธารณะ)
+// sitemap สำหรับ Google
+app.get('/sitemap.xml', async (c) => {
+  const base = c.env.SHOP_URL;
+  const [{ results: prods }, { results: cats }] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT p.slug, p.updated_at,
+         (SELECT r2_key FROM product_images i WHERE i.product_id = p.id ORDER BY i.sort_order, i.id LIMIT 1) AS image_key
+       FROM products p WHERE p.status = 'active'
+         AND EXISTS (SELECT 1 FROM variants v WHERE v.product_id = p.id AND v.active = 1)
+       ORDER BY p.id DESC LIMIT 5000`,
+    ).all<{ slug: string; updated_at: string; image_key: string | null }>(),
+    c.env.DB.prepare('SELECT slug FROM categories ORDER BY sort_order, id').all<{ slug: string }>(),
+  ]);
+  const esc = (x: string) => x.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const u = (loc: string, extra = '') => `<url><loc>${esc(loc)}</loc>${extra}</url>`;
+  const xml =
+    '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">' +
+    u(base + '/') +
+    cats.map((k) => u(`${base}/?c=${encodeURIComponent(k.slug)}`)).join('') +
+    prods
+      .map((p) =>
+        u(
+          `${base}/p/${encodeURIComponent(p.slug)}`,
+          `<lastmod>${esc(p.updated_at.slice(0, 10))}</lastmod>` +
+            (p.image_key ? `<image:image><image:loc>${esc(base + imgUrl(p.image_key))}</image:loc></image:image>` : ''),
+        ),
+      )
+      .join('') +
+    u(base + '/policy') +
+    '</urlset>';
+  return c.body(xml, 200, { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' });
+});
+
+// รูปสินค้าและโลโก้จาก R2 (สลิปไม่เปิดสาธารณะ)
 app.get('/media/*', async (c) => {
   const key = decodeURIComponent(c.req.path.slice('/media/'.length));
-  if (!key.startsWith('products/')) return c.notFound();
+  if (!key.startsWith('products/') && !key.startsWith('brand/')) return c.notFound();
   const obj = await c.env.BUCKET.get(key);
   if (!obj) return c.notFound();
   const h = new Headers();
   obj.writeHttpMetadata(h);
   h.set('cache-control', 'public, max-age=31536000, immutable');
   h.set('etag', obj.httpEtag);
+  h.set('x-content-type-options', 'nosniff');
+  h.set('content-security-policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
   return new Response(obj.body, { headers: h });
 });
 

@@ -6,7 +6,27 @@ const FONTS =
 
 export const imgUrl = (key?: string | null) => (key ? `/media/${key}` : '');
 
-export function Shell(props: { title: string; description?: string; image?: string; children: Child; bodyClass?: string; scripts?: string[] }) {
+// JSON-LD ฝังในหน้า (กัน </script> ด้วยการ escape <)
+const ld = (o: unknown) => JSON.stringify(o).replace(/</g, '\\u003c');
+
+export function Shell(props: {
+  title: string;
+  description?: string;
+  image?: string;
+  children: Child;
+  bodyClass?: string;
+  scripts?: string[];
+  s?: Settings;
+  url?: string; // URL หลักของหน้า (canonical) แบบเต็ม
+  noindex?: boolean;
+  ogType?: string;
+  jsonLd?: unknown[];
+}) {
+  const s = props.s;
+  const origin = props.url ? new URL(props.url).origin : '';
+  const icon = s?.logo_key ? imgUrl(s.logo_key) : '/favicon.svg';
+  const shareKey = s?.share_image_key || s?.logo_key;
+  const image = props.image || (shareKey && origin ? origin + imgUrl(shareKey) : undefined);
   return (
     <html lang="th">
       <head>
@@ -14,20 +34,32 @@ export function Shell(props: { title: string; description?: string; image?: stri
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <title>{props.title}</title>
         {props.description && <meta name="description" content={props.description} />}
+        {props.noindex && <meta name="robots" content="noindex" />}
+        {props.url && <link rel="canonical" href={props.url} />}
         <meta property="og:title" content={props.title} />
         {props.description && <meta property="og:description" content={props.description} />}
-        {props.image && <meta property="og:image" content={props.image} />}
+        {image && <meta property="og:image" content={image} />}
+        {props.url && <meta property="og:url" content={props.url} />}
+        <meta property="og:type" content={props.ogType || 'website'} />
+        {s?.shop_name && <meta property="og:site_name" content={s.shop_name} />}
+        <meta property="og:locale" content="th_TH" />
+        <meta name="twitter:card" content={image ? 'summary_large_image' : 'summary'} />
+        {s?.google_site_verification && <meta name="google-site-verification" content={s.google_site_verification} />}
         <meta name="theme-color" content="#2f7d4f" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
         <link rel="stylesheet" href={FONTS} />
-        <link rel="stylesheet" href="/styles.css?v=2" />
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="/styles.css?v=3" />
+        <link rel="icon" href={icon} type={icon.endsWith('.svg') ? 'image/svg+xml' : undefined} />
+        {s?.logo_key && <link rel="apple-touch-icon" href={icon} />}
+        {(props.jsonLd ?? []).map((o) => (
+          <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ld(o) }}></script>
+        ))}
       </head>
       <body class={props.bodyClass}>
         {props.children}
-        {(props.scripts ?? ['/app.js?v=1']).map((s) => (
-          <script src={s} defer></script>
+        {(props.scripts ?? ['/app.js?v=1']).map((src) => (
+          <script src={src} defer></script>
         ))}
       </body>
     </html>
@@ -42,8 +74,9 @@ export function ShopHeader(props: { s: Settings; q?: string; back?: boolean }) {
           ‹
         </a>
       ) : (
-        <a class="brand" href="/">
-          {props.s.shop_name || 'Phasakura'}
+        <a class="brand" href="/" aria-label={props.s.shop_name || 'Phasakura'}>
+          {props.s.logo_key && <img class="logo" src={imgUrl(props.s.logo_key)} alt="" width="32" height="32" />}
+          {!(props.s.logo_key && props.s.logo_hide_name === '1') && <span>{props.s.shop_name || 'Phasakura'}</span>}
         </a>
       )}
       <form class="search" action="/" method="get" role="search">
